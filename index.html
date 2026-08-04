@@ -274,7 +274,7 @@
     box-shadow:0 1px 3px rgba(0,0,0,.06);
   }
   .roster-chip .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-  .roster-sync-banner{font-size:11.5px;padding:7px 12px;border-radius:6px;margin-bottom:12px;font-weight:bold;}
+  .roster-sync-banner{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;font-size:13px;border-radius:50%;margin-bottom:12px;font-weight:bold;cursor:default;}
   .roster-sync-banner.syncing{background:var(--hilite);color:var(--navy);}
   .roster-sync-banner.ok{background:var(--green-bg);color:var(--green);}
   .roster-sync-banner.error{background:var(--red-bg);color:var(--red-fg);}
@@ -557,7 +557,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:-4px 0 10px;">
         <span style="font-size:10.5px;color:#889;" id="orderformSyncInfo">Belum pernah cek Order Form.</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-ghost" id="waTestBtn" title="Test Notif WA" aria-label="Test Notif WA" style="font-size:15px;padding:6px 10px;line-height:1;">📲</button>
+          <button type="button" class="btn btn-ghost" id="waTestBtn" title="Test Notif WA" aria-label="Test Notif WA" style="display:none;font-size:15px;padding:6px 10px;line-height:1;">📲</button>
           <button type="button" class="btn btn-ghost" id="orderformSyncBtn" style="font-size:11.5px;padding:6px 12px;">🔄 Cek Pengajuan Baru (Order Form)</button>
         </div>
       </div>
@@ -644,7 +644,7 @@
 
   <!-- ================= VIEW: ROSTER ================= -->
   <div class="view" id="view-roster">
-    <div id="rosterSyncBanner" class="roster-sync-banner syncing">Menyinkronkan data roster dari Google Sheets...</div>
+    <div id="rosterSyncBanner" class="roster-sync-banner syncing" title="Menyinkronkan data roster dari Google Sheets..." aria-label="Status sinkron roster">⏳</div>
     <div class="roster-toolbar">
       <div class="roster-modeselect">
         <button data-mode="today" class="active">Hari Ini</button>
@@ -1868,7 +1868,8 @@ async function fetchHelperRosterData(){
 }
 async function loadRoster(){
   const banner = document.getElementById('rosterSyncBanner');
-  banner.textContent = 'Menyinkronkan data roster dari Google Sheets...';
+  banner.textContent = '⏳';
+  banner.title = 'Menyinkronkan data roster dari Google Sheets...';
   banner.className = 'roster-sync-banner syncing';
   // Helper di-fetch paralel dari sheet terpisah - kegagalannya tidak boleh menggagalkan roster utama
   const helperPromise = fetchHelperRosterData().catch(err => {
@@ -1908,10 +1909,12 @@ async function loadRoster(){
     rosterDays = merged;
     rosterLastSync = new Date();
     rosterLoaded = true;
-    banner.textContent = '✓ Live-sync dari Google Sheets · terakhir sinkron ' + rosterLastSync.toLocaleTimeString('id-ID');
+    banner.textContent = '✓';
+    banner.title = 'Live-sync dari Google Sheets · terakhir sinkron ' + rosterLastSync.toLocaleTimeString('id-ID');
     banner.className = 'roster-sync-banner ok';
   }catch(e){
-    banner.textContent = e.message;
+    banner.textContent = '✗';
+    banner.title = e.message;
     banner.className = 'roster-sync-banner error';
     showToast('✗ Gagal sinkron roster', 'error');
     const helperResult = await helperPromise;
