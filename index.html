@@ -753,12 +753,12 @@ function orderformCsvUrl(){
    ============================================================ */
 const WA_NOTIF_ENABLED = true; // set false untuk mematikan notifikasi WA tanpa hapus konfigurasi
 const WA_RECIPIENTS = [
-  { name: "Harris", phone: "6282158107539" } // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
+  { name: "Harris", phone: "6282158107539" }, // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
   //{ name: "Sony Salubongga", phone: "6281392040909" } // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
-  //{ name: "Nico", phone: "6282142656289" } // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
-  //{ name: "Lukman Gunawan", phone: "6285393750696" } // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
-  //{ name: "Adhe", phone: "6282155547898" } // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
-  //{ name: "Taufik", phone: "6285320308959" } // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
+  { name: "Nico", phone: "6282142656289" }, // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
+  { name: "Lukman Gunawan", phone: "6285393750696" }, // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
+  { name: "Adhe", phone: "6282155547898" }, // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
+  { name: "Taufik", phone: "6285320308959" } // <-- WAJIB diisi nomor WA tujuan (62xxx, tanpa tanda +)
   // Tambah baris lain kalau mau kirim ke nomor lain juga (mis. setelah tahap testing selesai), contoh:
   // { name: "Nico", phone: "62812xxxxxxx" },
 ];
@@ -3433,9 +3433,19 @@ async function syncOrderForm(opts){
 
     const rows = await fetchOrderFormRows();
     const newItems = [];
+    // lastDataRowNum = baris TERAKHIR yang benar-benar berisi data (bukan sekadar baris
+    // terakhir yang dikembalikan Google Sheets). PENTING: Google Sheets kadang ikut
+    // mengembalikan baris-baris KOSONG di bawah data asli lewat endpoint gviz/CSV (mis.
+    // kalau pernah ada format/warna yang menyebar ke banyak baris di bawah data). Kalau
+    // "baris terakhir" dihitung dari rows.length begitu saja (termasuk baris kosong itu),
+    // orderform:lastrow di backend akan ter-set kelewat tinggi, sehingga SEMUA pengajuan
+    // RFID baru berikutnya (yang row number-nya masih di bawah angka palsu itu) dianggap
+    // "sudah pernah diproses" dan TIDAK PERNAH muncul lagi di Follow Up / memicu notif WA.
+    let lastDataRowNum = lastRow;
     rows.forEach((row, idx) => {
       const rowNum = idx + 2; // range dimulai dari A2
       const hasData = row && row.some(c => c !== undefined && c !== '');
+      if(hasData && rowNum > lastDataRowNum) lastDataRowNum = rowNum;
       if(rowNum > lastRow && hasData){
         newItems.push(orderRowToFollowUp(row, rowNum));
       }
@@ -3455,7 +3465,9 @@ async function syncOrderForm(opts){
       }
     }
 
-    const newLastRow = 1 + rows.length;
+    // Pakai baris data terakhir yang SUNGGUHAN (lastDataRowNum), BUKAN 1 + rows.length lagi
+    // (lihat catatan panjang di atas kenapa itu berbahaya).
+    const newLastRow = lastDataRowNum;
     if(newLastRow > lastRow){ await store.set(ORDERFORM_LASTROW_KEY, String(newLastRow)); }
 
     const now = new Date();
