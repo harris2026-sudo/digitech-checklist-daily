@@ -663,7 +663,6 @@
   <footer>Maintain. Monitor. Improve. — Digitech Monitoring Team</footer>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
 /* ---- UI motion helper: count-up animation for summary numbers ---- */
 function animateCount(el, to){
@@ -3352,9 +3351,46 @@ async function fetchOrderFormRows(){
   }
   const csvText = await res.text();
   if(!csvText || !csvText.trim()) return [];
-  const parsed = Papa.parse(csvText.trim(), { skipEmptyLines: false });
-  const allRows = parsed.data || [];
+  const allRows = parseCsvSimple(csvText.trim());
   return allRows.slice(1); // baris 0 = header, dibuang
+}
+
+/* Parser CSV kecil buatan sendiri (pengganti library eksternal PapaParse).
+   Dibuat supaya fitur "Cek Pengajuan Baru (Order Form)" TIDAK bergantung pada
+   koneksi ke CDN luar (cdnjs.cloudflare.com) — kalau CDN itu diblokir/lambat di
+   jaringan kantor, fitur ini tetap jalan normal karena tidak butuh internet
+   tambahan selain fetch CSV Google Sheets itu sendiri. Mendukung field berisi
+   koma/petik dua/baris baru di dalam tanda kutip ("...") sesuai standar CSV. */
+function parseCsvSimple(text){
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i + 1] === '"'){ field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else if(c === '"'){
+      inQuotes = true;
+    } else if(c === ','){
+      row.push(field); field = '';
+    } else if(c === '\r'){
+      // dilewati, tunggu \n
+    } else if(c === '\n'){
+      row.push(field); field = '';
+      rows.push(row); row = [];
+    } else {
+      field += c;
+    }
+  }
+  row.push(field);
+  rows.push(row);
+  return rows;
 }
 
 function mapOrderFormStatus(s){
