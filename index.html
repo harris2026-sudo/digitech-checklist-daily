@@ -1929,8 +1929,46 @@ async function loadRoster(){
   const helperResult = await helperPromise;
   if(helperResult){ rosterHelperDays = helperResult.days; rosterHelperCuti = helperResult.cuti; }
   renderRoster();
+  checkRosterGapAlert();
 }
 function sameDay(a,b){ return a.toDateString() === b.toDateString(); }
+/* ---------------- ALERT: PENGINGAT ISI JADWAL ROSTER H-7 ---------------- */
+/* Supaya kejadian "Roster tampil kosong pas hari-H" (lihat histori: 5 Agustus 2026
+   kosong karena sheet belum diisi) tidak terulang, tiap kali roster berhasil
+   disinkron kita cek: apakah jadwal 7 hari ke depan (H+0 s/d H+6) SUDAH terisi
+   di sheet, baik tim utama maupun tim Helper. Kalau ada tanggal yang masih
+   kosong, tampilkan banner peringatan di ATAS layar (muncul di menu APA SAJA,
+   bukan cuma waktu buka menu Roster) supaya PIC ingat mengisi jadwal dari
+   jauh-jauh hari, bukan pas hari-H sudah kepepet. */
+function checkRosterGapAlert(){
+  const old = document.getElementById('rosterGapBanner');
+  if(old) old.remove();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const missingMain = [];
+  const missingHelper = [];
+  for(let i = 0; i < 7; i++){
+    const d = new Date(today); d.setDate(today.getDate() + i);
+    const mainRec = rosterDays.find(r => sameDay(r.date, d));
+    const mainEmpty = !mainRec || (mainRec.shift1 === '-' && mainRec.shift2 === '-' && mainRec.shift3 === '-');
+    if(mainEmpty) missingMain.push(d);
+    const helperRec = (rosterHelperDays || []).find(r => sameDay(r.date, d));
+    const helperEmpty = !helperRec || (helperRec.shift1 === '-' && helperRec.shift2 === '-');
+    if(helperEmpty) missingHelper.push(d);
+  }
+  if(missingMain.length === 0 && missingHelper.length === 0) return;
+  const fmt = d => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+  const parts = [];
+  if(missingMain.length) parts.push('Tim Utama: ' + missingMain.map(fmt).join(', '));
+  if(missingHelper.length) parts.push('Tim Helper: ' + missingHelper.map(fmt).join(', '));
+  const b = document.createElement('div');
+  b.id = 'rosterGapBanner';
+  const errBanner = document.getElementById('connErrorBanner');
+  const topPos = errBanner ? errBanner.offsetHeight + 'px' : '0';
+  b.style.cssText = 'position:fixed;top:' + topPos + ';left:0;right:0;z-index:99997;background:#B8860B;color:#fff;padding:10px 16px;font-size:13px;font-weight:bold;text-align:center;font-family:Arial;cursor:pointer;';
+  b.textContent = '📅 Jadwal Roster 7 hari ke depan belum lengkap — ' + parts.join(' | ') + '. Segera isi di Google Sheets Roster supaya tampilan tidak kosong. (klik untuk tutup sementara)';
+  b.onclick = () => b.remove();
+  document.body.prepend(b);
+}
 function startOfWeekBlockFor(date){
   // cari blok 8-hari (sesuai struktur sheet) yang memuat tanggal ini
   // fallback: pakai 7 hari sebelum s/d sesudah bila tidak ada match blok eksplisit
@@ -2110,6 +2148,10 @@ setInterval(() => {
   if(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('roster-editable-label')) return; // jangan ganggu saat user lagi edit label
   loadRoster();
 }, ROSTER_AUTO_SYNC_MS);
+
+// Sinkron & cek jadwal Roster otomatis begitu app dibuka (bukan cuma waktu klik menu Roster),
+// supaya banner pengingat "jadwal H-7 belum diisi" muncul di menu APA SAJA yang sedang dibuka.
+loadRoster();
 
 /* ---------------- TAB SWITCHING ---------------- */
 document.querySelectorAll('.tab').forEach(tab => {
