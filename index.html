@@ -434,6 +434,27 @@
     font-size:10px;font-weight:bold;padding:1px 6px;margin-left:5px;vertical-align:middle;
   }
   .fu-src-tag{display:inline-block;font-size:9.5px;font-weight:bold;background:var(--hilite);color:var(--navy);border-radius:8px;padding:1px 7px;margin-left:6px;vertical-align:middle;}
+
+  /* Icon interaktif pengganti banner merah full-width saat gagal fetch dari server */
+  .conn-err-icon{
+    position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;
+    background:#B3261E;color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:22px;box-shadow:0 4px 14px rgba(0,0,0,0.35);cursor:pointer;z-index:99999;
+    animation:connErrPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes connErrPulse{
+    0%,100%{box-shadow:0 4px 14px rgba(179,38,30,0.35);}
+    50%{box-shadow:0 4px 20px rgba(179,38,30,0.75);}
+  }
+  .conn-err-popup{
+    position:fixed;bottom:78px;right:20px;max-width:280px;background:#B3261E;color:#fff;
+    padding:12px 14px;border-radius:10px;font-size:12px;font-family:Arial;line-height:1.55;
+    box-shadow:0 6px 18px rgba(0,0,0,0.4);z-index:99999;display:none;
+  }
+  .conn-err-popup b{color:#fff;}
+  .conn-err-popup .cep-close{
+    display:inline-block;margin-top:8px;text-decoration:underline;cursor:pointer;font-weight:bold;
+  }
 </style>
 </head>
 <body>
@@ -1050,20 +1071,45 @@ async function gsListValues(prefix=''){
 
 const store = { get: gsGet, set: gsSet, delete: gsDelete, list: gsList, listValues: gsListValues };
 
-/* Banner peringatan kalau GAGAL KONEK ke backend (bukan berarti data kosong).
-   Dulu error ini ditelan diam-diam oleh catch(e){ pakai default } di banyak
-   tempat, sehingga app tampak "semua data hilang" padahal cuma gagal fetch. */
+/* Icon peringatan (bukan banner full-width lagi) kalau GAGAL KONEK ke backend
+   (bukan berarti data kosong). Dulu error ini ditelan diam-diam oleh catch(e){
+   pakai default } di banyak tempat, sehingga app tampak "semua data hilang"
+   padahal cuma gagal fetch. Sekarang ditampilkan sebagai icon ⚠️ bulat mengambang
+   di pojok kanan bawah -- klik untuk lihat detail pesannya, tidak menutupi konten. */
 let _connectionErrorShown = false;
 function showConnectionErrorBanner(key, msg){
-  if (_connectionErrorShown) return;
-  _connectionErrorShown = true;
-  const b = document.createElement('div');
-  b.id = 'connErrorBanner';
-  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#B3261E;color:#fff;padding:10px 16px;font-size:13px;font-weight:bold;text-align:center;font-family:Arial;cursor:pointer;';
-  b.textContent = '⚠️ Gagal memuat data dari server (' + msg + '). Data yang tampil di layar BUKAN data aslimu — data aslimu di Google Sheets AMAN. Coba refresh / buka lewat GitHub Pages, bukan file lokal. (klik untuk tutup)';
-  b.onclick = () => { b.remove(); _connectionErrorShown = false; };
-  document.body.prepend(b);
   console.error('Connection error on key "' + key + '":', msg);
+  if (_connectionErrorShown){
+    const popup = document.getElementById('connErrorPopup');
+    if(popup) popup.querySelector('.cep-msg').textContent = buildConnErrorMsg(msg);
+    return;
+  }
+  _connectionErrorShown = true;
+
+  const icon = document.createElement('div');
+  icon.id = 'connErrorIcon';
+  icon.className = 'conn-err-icon';
+  icon.title = 'Gagal memuat data dari server — klik untuk detail';
+  icon.textContent = '⚠️';
+
+  const popup = document.createElement('div');
+  popup.id = 'connErrorPopup';
+  popup.className = 'conn-err-popup';
+  popup.innerHTML = '<span class="cep-msg">' + buildConnErrorMsg(msg) + '</span><br><span class="cep-close">Tutup</span>';
+
+  icon.onclick = () => {
+    popup.style.display = popup.style.display === 'block' ? 'none' : 'block';
+  };
+  popup.querySelector('.cep-close').onclick = (e) => {
+    e.stopPropagation();
+    popup.style.display = 'none';
+  };
+
+  document.body.appendChild(icon);
+  document.body.appendChild(popup);
+}
+function buildConnErrorMsg(msg){
+  return '⚠️ Gagal memuat data dari server (' + msg + '). Data yang tampil di layar <b>BUKAN</b> data aslimu — data aslimu di Google Sheets AMAN. Coba refresh / buka lewat GitHub Pages, bukan file lokal.';
 }
 
 /* Banner peringatan kalau backend belum dikonfigurasi */
@@ -1962,9 +2008,7 @@ function checkRosterGapAlert(){
   if(missingHelper.length) parts.push('Tim Helper: ' + missingHelper.map(fmt).join(', '));
   const b = document.createElement('div');
   b.id = 'rosterGapBanner';
-  const errBanner = document.getElementById('connErrorBanner');
-  const topPos = errBanner ? errBanner.offsetHeight + 'px' : '0';
-  b.style.cssText = 'position:fixed;top:' + topPos + ';left:0;right:0;z-index:99997;background:#B8860B;color:#fff;padding:10px 16px;font-size:13px;font-weight:bold;text-align:center;font-family:Arial;cursor:pointer;';
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99997;background:#B8860B;color:#fff;padding:10px 16px;font-size:13px;font-weight:bold;text-align:center;font-family:Arial;cursor:pointer;';
   b.textContent = '📅 Jadwal Roster 7 hari ke depan belum lengkap — ' + parts.join(' | ') + '. Segera isi di Google Sheets Roster supaya tampilan tidak kosong. (klik untuk tutup sementara)';
   b.onclick = () => b.remove();
   document.body.prepend(b);
@@ -2825,6 +2869,16 @@ function dayLabel(dateStr){
   return `${days[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}`;
 }
 
+/* Format tanggal "YYYY-MM-DD" -> "DD-MM-YYYY" untuk tampilan di kartu Follow Up
+   (dipakai bareng deskripsi item, jadi disiapkan dengan spasi di akhir). */
+function formatDateID(dateStr){
+  if(!dateStr) return '';
+  const parts = String(dateStr).split('-');
+  if(parts.length !== 3) return dateStr;
+  const [y, m, d] = parts;
+  return `${d}-${m}-${y}`;
+}
+
 /* Kartu badge S1/S2/S3/NS/Lama di sisi kanan tiap baris hari, menandakan shift mana saja yang
    sudah terisi pada tanggal tsb. */
 function shiftBadgesHtml(dateEntries){
@@ -2997,8 +3051,8 @@ function renderFollowListBody(){
   el.innerHTML = items.map(it => {
     const isManual = it.source === 'manual';
     const descHtml = isManual
-      ? `<span class="fi-date">${it.date}</span>${it.desc}`
-      : `<span class="fi-date">${it.date}</span>${taskTextMap[it.taskId] || it.taskId}`;
+      ? `<span class="fi-date">${formatDateID(it.date)} </span>${it.desc}`
+      : `<span class="fi-date">${formatDateID(it.date)} </span>${taskTextMap[it.taskId] || it.taskId}`;
     const metaHtml = isManual
       ? `<span class="fi-status fu">Follow Up (manual)</span>${it.vendor ? ' · ' + it.vendor : ''}${it.pic ? ' · PIC: ' + it.pic : ''}${it.due ? ' · Due: ' + it.due : ''}`
       : `<span class="fi-status ${it.status==='Not yet'?'ny':'fu'}">${it.status}</span>${it.shiftLabel ? ' · ' + it.shiftLabel : ''}`;
@@ -3340,7 +3394,7 @@ function renderFuList(){
       <div class="fu-top">
         <div>
           <div class="fu-desc">${it.desc}${it.source === 'orderform' ? '<span class="fu-src-tag">📥 Order Form</span>' : ''}</div>
-          <div class="fu-meta">${it.date}${it.vendor ? ' · ' + it.vendor : ''}${it.pic ? ' · PIC: ' + it.pic : ''}${it.due ? ' · Due: ' + it.due : ''}</div>
+          <div class="fu-meta">${formatDateID(it.date)}${it.vendor ? ' · ' + it.vendor : ''}${it.pic ? ' · PIC: ' + it.pic : ''}${it.due ? ' · Due: ' + it.due : ''}</div>
         </div>
         <span class="fu-badge ${it.status}">${it.status}</span>
       </div>
