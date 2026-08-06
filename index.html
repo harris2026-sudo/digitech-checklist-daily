@@ -2343,17 +2343,6 @@ function buildCategoryDiv(catKey, cat, isCustom){
     renderTaskRow(body, id, t.text, displayNum, { custom: true, ci: catKey, customIndex: xi });
   });
 
-  if(hiddenCount > 0){
-    const hiddenBar = document.createElement('div');
-    hiddenBar.className = 'hidden-chip-bar';
-    const link = document.createElement('span');
-    link.className = 'restore-link';
-    link.textContent = `↺ Pulihkan ${hiddenCount} checklist yang dihapus di menu ini`;
-    link.onclick = () => restoreCategoryHiddenTasks(catKey);
-    hiddenBar.appendChild(link);
-    body.appendChild(hiddenBar);
-  }
-
   const addWrap = document.createElement('div');
   addWrap.className = 'add-task-wrap';
   const addBtn = document.createElement('button');
@@ -2388,19 +2377,6 @@ function buildUI(){
     if(hiddenCategories[ci]) return;
     container.appendChild(buildCategoryDiv(ci, cat, false));
   });
-
-  const hiddenCatCount = Object.keys(hiddenCategories).length;
-  if(hiddenCatCount > 0){
-    const restoreBar = document.createElement('div');
-    restoreBar.className = 'hidden-chip-bar';
-    restoreBar.style.padding = '0 2px 12px';
-    const link = document.createElement('span');
-    link.className = 'restore-link';
-    link.textContent = `↺ Pulihkan ${hiddenCatCount} kategori yang dihapus`;
-    link.onclick = () => restoreHiddenCategories();
-    restoreBar.appendChild(link);
-    container.appendChild(restoreBar);
-  }
 
   customCategories.forEach(cat => {
     container.appendChild(buildCategoryDiv(cat.id, cat, true));
