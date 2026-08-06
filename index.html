@@ -3331,6 +3331,37 @@ async function saveFollowUp(){
   catch(e){ console.error('Gagal menyimpan follow up', e); }
 }
 
+/* Item checklist harian berstatus "Follow up" / "Not yet" (mis. dari Check Report Harian
+   Helper) ikut ditampilkan juga di tab Follow Up ini -- sebelumnya item semacam ini cuma
+   muncul di Rekap ("Item Follow up / Belum Selesai per periode"). Status Open/Onprogress/
+   Hold/Close-nya dan status "Hapus"-nya dipakai bersama dengan Rekap (rekapFuStatusMap /
+   rekapFuDismissed), jadi mengubah salah satu tempat otomatis tersinkron ke tempat lain. */
+let fuChecklistItems = [];
+async function loadFuChecklistItems(){
+  await fetchAllEntries();
+  await loadRekapFuStatus();
+  const items = [];
+  Object.keys(allEntriesCache || {}).forEach(d => {
+    const dateEntries = allEntriesCache[d];
+    dayShiftEntries(dateEntries).forEach(({shiftKey, label, data}) => {
+      if(!data.status) return;
+      Object.keys(data.status).forEach(taskId => {
+        const s = data.status[taskId];
+        if(s === 'Follow up' || s === 'Not yet'){
+          const key = rekapFuKey(d, taskId, shiftKey);
+          if(rekapFuDismissed[key]) return;
+          items.push({
+            key, date: d, shiftKey, shiftLabel: label, taskId, origStatus: s,
+            note: (data.notes && data.notes[taskId]) || '',
+            trackStatus: rekapFuStatusMap[key] || 'Open'
+          });
+        }
+      });
+    });
+  });
+  fuChecklistItems = items;
+}
+
 document.getElementById('fuAddBtn').onclick = async () => {
   const desc = document.getElementById('fuDesc').value.trim();
   if(!desc){ alert('Deskripsi temuan / task wajib diisi.'); return; }
@@ -3358,13 +3389,15 @@ document.getElementById('fuAddBtn').onclick = async () => {
 function fuSummaryCounts(){
   const counts = {}; FOLLOWUP_STATUS.forEach(s=>counts[s]=0);
   followUpItems.forEach(it => { if(counts[it.status] !== undefined) counts[it.status]++; });
+  fuChecklistItems.forEach(it => { if(counts[it.trackStatus] !== undefined) counts[it.trackStatus]++; });
   return counts;
 }
 
 function renderFuSummary(){
   const counts = fuSummaryCounts();
+  const total = followUpItems.length + fuChecklistItems.length;
   const html = FOLLOWUP_STATUS.map(s => `<div class="card"><div class="num" data-count="${counts[s]}">0</div><div class="lab">${s}</div></div>`).join('')
-    + `<div class="card"><div class="num" data-count="${followUpItems.length}">0</div><div class="lab">Total</div></div>`;
+    + `<div class="card"><div class="num" data-count="${total}">0</div><div class="lab">Total</div></div>`;
   document.getElementById('fuSummaryCards').innerHTML = html;
   animateCountsIn(document.getElementById('fuSummaryCards'));
 }
@@ -3382,50 +3415,97 @@ function renderFuList(){
   const el = document.getElementById('fuList');
   // Item berstatus "Close" otomatis tersimpan tapi disembunyikan dari tampilan "Semua"
   // (tetap ada di data & tetap bisa dibuka lewat filter "Close").
-  const items = followUpFilter === 'All'
+  const manualItems = followUpFilter === 'All'
     ? followUpItems.filter(it => it.status !== 'Close')
     : followUpItems.filter(it => it.status === followUpFilter);
-  if(items.length === 0){
+  const checklistItems = followUpFilter === 'All'
+    ? fuChecklistItems.filter(it => it.trackStatus !== 'Close')
+    : fuChecklistItems.filter(it => it.trackStatus === followUpFilter);
+
+  // Gabung lalu urutkan tanggal terbaru dulu, supaya item manual & item checklist (Follow up/
+  // Not yet dari Check Report Harian) tercampur rapi dalam satu daftar kronologis.
+  const combined = [
+    ...manualItems.map(it => ({ ...it, _kind: 'manual' })),
+    ...checklistItems.map(it => ({ ...it, _kind: 'checklist' }))
+  ].sort((a,b) => b.date.localeCompare(a.date));
+
+  if(combined.length === 0){
     el.innerHTML = '<div class="empty-note">Belum ada item follow up pada filter ini.</div>';
     return;
   }
-  el.innerHTML = items.map(it => `
-    <div class="fu-card status-${it.status}" data-id="${it.id}">
-      <div class="fu-top">
-        <div>
-          <div class="fu-desc">${it.desc}${it.source === 'orderform' ? '<span class="fu-src-tag">📥 Order Form</span>' : ''}</div>
-          <div class="fu-meta">${formatDateID(it.date)}${it.vendor ? ' · ' + it.vendor : ''}${it.pic ? ' · PIC: ' + it.pic : ''}${it.due ? ' · Due: ' + it.due : ''}</div>
+  el.innerHTML = combined.map(it => {
+    if(it._kind === 'manual'){
+      return `
+      <div class="fu-card status-${it.status}" data-id="${it.id}" data-kind="manual">
+        <div class="fu-top">
+          <div>
+            <div class="fu-desc">${it.desc}${it.source === 'orderform' ? '<span class="fu-src-tag">📥 Order Form</span>' : ''}</div>
+            <div class="fu-meta">${formatDateID(it.date)}${it.vendor ? ' · ' + it.vendor : ''}${it.pic ? ' · PIC: ' + it.pic : ''}${it.due ? ' · Due: ' + it.due : ''}</div>
+          </div>
+          <span class="fu-badge ${it.status}">${it.status}</span>
         </div>
-        <span class="fu-badge ${it.status}">${it.status}</span>
-      </div>
-      ${it.note ? `<div class="fu-note">${it.note}</div>` : ''}
-      <div class="fu-actions">
-        <select data-id="${it.id}" class="fu-status-select">
-          ${FOLLOWUP_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${s}</option>`).join('')}
-        </select>
-        <button class="fu-del" data-id="${it.id}">Hapus</button>
-      </div>
-    </div>
-  `).join('');
+        ${it.note ? `<div class="fu-note">${it.note}</div>` : ''}
+        <div class="fu-actions">
+          <select data-id="${it.id}" data-kind="manual" class="fu-status-select">
+            ${FOLLOWUP_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${s}</option>`).join('')}
+          </select>
+          <button class="fu-del" data-id="${it.id}" data-kind="manual">Hapus</button>
+        </div>
+      </div>`;
+    }
+    // Item dari checklist harian (status "Follow up" / "Not yet"), sumber data sama dengan
+    // yang dipakai Rekap ("Item Follow up / Belum Selesai") -- perubahan di sini otomatis
+    // tersinkron ke Rekap juga, begitu pula sebaliknya.
+    const metaHtml = `<span class="fi-status ${it.origStatus==='Not yet'?'ny':'fu'}">${it.origStatus}</span>${it.shiftLabel ? ' · ' + it.shiftLabel : ''}`;
+    return `
+      <div class="fu-card status-${it.trackStatus}" data-key="${it.key}" data-kind="checklist">
+        <div class="fu-top">
+          <div>
+            <div class="fu-desc"><span class="fi-date">${formatDateID(it.date)} </span>${taskTextMap[it.taskId] || it.taskId}</div>
+            <div class="fu-meta">${metaHtml}</div>
+          </div>
+          <span class="fu-badge ${it.trackStatus}">${it.trackStatus}</span>
+        </div>
+        ${it.note ? `<div class="fu-note">${it.note}</div>` : ''}
+        <div class="fu-actions">
+          <select data-key="${it.key}" data-kind="checklist" class="fu-status-select">
+            ${FOLLOWUP_STATUS.map(s => `<option value="${s}" ${s===it.trackStatus?'selected':''}>${s}</option>`).join('')}
+          </select>
+          <button class="fu-del" data-key="${it.key}" data-kind="checklist">Hapus</button>
+        </div>
+      </div>`;
+  }).join('');
 
   el.querySelectorAll('.fu-status-select').forEach(sel => {
     sel.onchange = async () => {
-      const item = followUpItems.find(i => i.id === sel.dataset.id);
-      if(item){ item.status = sel.value; await saveFollowUp(); renderFollowUp(); }
+      if(sel.dataset.kind === 'manual'){
+        const item = followUpItems.find(i => i.id === sel.dataset.id);
+        if(item){ item.status = sel.value; await saveFollowUp(); }
+      } else {
+        rekapFuStatusMap[sel.dataset.key] = sel.value;
+        await saveRekapFuStatus();
+      }
+      renderFollowUp();
     };
   });
   el.querySelectorAll('.fu-del').forEach(btn => {
     btn.onclick = async () => {
-      if(confirm('Hapus item follow up ini?')){
+      if(!confirm('Hapus item follow up ini?')) return;
+      if(btn.dataset.kind === 'manual'){
         followUpItems = followUpItems.filter(i => i.id !== btn.dataset.id);
-        await saveFollowUp(); renderFollowUp();
+        await saveFollowUp();
+      } else {
+        rekapFuDismissed[btn.dataset.key] = true;
+        await saveRekapFuDismissed();
       }
+      renderFollowUp();
     };
   });
 }
 
 async function renderFollowUp(){
   await loadFollowUp();
+  await loadFuChecklistItems();
   renderFuSummary();
   renderFuFilterBar();
   renderFuList();
